@@ -1,7 +1,7 @@
 PROG    = object
 CFLAGS  = -g -Wall -O3 -std=gnu11 -flto -fuse-linker-plugin
 LDADD   = -ldynamic
-OBJS    = main.o object_type.o object_base.o
+OBJS    = main.o bytes.o object_type.o object_base.o
 OBJS   += object_integer.o
 OBJS   += object_float.o
 OBJS   += object_string.o
