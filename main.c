@@ -18,78 +18,9 @@
 #include "object_map.h"
 #include "object.h"
 
-#include "bytes.h"
+#include "mp4_atom.h"
 
-size_t bytes_offset(bytes *b1, bytes *b2)
-{
-  return b2->base - b1->base;
-}
-
-typedef object mp4_atom;
-
-void mp4_atom_container_unpack(mp4_atom *, bytes *);
-
-mp4_atom *mp4_atom_new(char *type)
-{
-  mp4_atom *atom;
-
-  atom = object_map();
-  object_map_set(atom, "type", object_string(type ? type : "root"));
-
-  return atom;
-}
-
-void mp4_atom_unpack(mp4_atom *atom, bytes *b)
-{
-  char *type;
-
-  type = object_string_value(object_map_get(atom, "type"));
-  if (strcmp(type, "root") == 0)
-    mp4_atom_container_unpack(atom, b);
-  if (strcmp(type, "moov") == 0)
-    mp4_atom_container_unpack(atom, b);
-  if (strcmp(type, "trak") == 0)
-    mp4_atom_container_unpack(atom, b);
-
-}
-
-void mp4_atom_container_unpack(mp4_atom *atom, bytes *b)
-{
-  bytes saved;
-  object *items;
-  mp4_atom *item;
-  size_t size;
-  char type[4];
-
-  items = object_map_get(atom, "items");
-  if (!items)
-    {
-      items = object_list();
-      object_map_set(atom, "items", items);
-    }
-
-  while (bytes_valid(b) && bytes_size(b))
-    {
-      saved = *b;
-      size = bytes_pop32(b);
-      bytes_pop(b, (uint8_t *) type, sizeof type);
-      if (size == 0)
-        size = bytes_size(b) - 8;
-      else if (size == 1)
-        size = bytes_pop64(b) - 16;
-
-      bytes_copy(&child_bytes, b);
-      bytes_truncate(&child_bytes, size);
-      child = mp4_atom_new(type);
-      mp4_atom_unpack(child, &child_bytes);
-      object_list_append(children, children);
-
-      bytes_pop(b, NULL, size);
-    }
-}
-
-
-void load(char *path, void **data, size_t *size)
+ssize_t load(char *path, void **data)
 {
   struct stat st;
   int e, fd;
@@ -97,37 +28,58 @@ void load(char *path, void **data, size_t *size)
 
   e = stat(path, &st);
   if (e == -1)
-    return;
+    return -1;
 
-  *size = st.st_size;
-  *data = malloc(*size);
+  st.st_size;
+  *data = malloc(st.st_size);
   if (!*data)
-    return;
+    return -1;
 
   fd = open(path, O_RDONLY);
   if (fd == -1)
     {
       free(*data);
-      *data = NULL;
-      return;
+      return -1;
     }
 
-  n = read(fd, *data, *size);
+  n = read(fd, *data, st.st_size);
   (void) close(fd);
-  if (n != *size)
+  if (n != st.st_size)
     {
       free(*data);
-      *data = NULL;
+      return -1;
     }
+
+  return n;
 }
 
+int main()
+{
+  mp4_atom *a;
+  void *data;
+  ssize_t n;
+
+  n = load(argv[1], &data);
+  if (n == -1)
+    err(1, "load");
+
+  a = mp4_atom_new(NULL);
+  e = mp4_atom_unpack(a, data, n);
+  if (e == -1)
+    err(1, "mp4_atom_unpack");
+  mp4_atom_print(a, stdout);
+  mp4_atom_release(atom);
+
+  free(data);
+}
+
+/*
 int main(int argc, char **argv)
 {
   bytes bytes;
   void *data;
   size_t size;
   object *atom;
-  char *string;
 
   load(argv[1], &data, &size);
   if (!data)
@@ -136,14 +88,13 @@ int main(int argc, char **argv)
   bytes_construct(&bytes, data, size);
   atom = mp4_atom_new(NULL);
   mp4_atom_unpack(atom, &bytes);
-  string = object_pack(atom);
 
   printf("%s\n", string);
 
   object_release(atom);
   free(string);
   free(data);
-}
+  }*/
 
 /*
 int main()
